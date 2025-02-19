@@ -18,6 +18,7 @@ export function findAnchor(doc: Document, alias: Alias): Scalar<string> | null {
         && typeof scalar.value === 'string'
       ) {
         anchor = scalar as Scalar<string>
+        return visit.BREAK
       }
     },
   })
