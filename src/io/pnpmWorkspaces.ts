@@ -22,30 +22,43 @@ export async function loadPnpmWorkspace(
 
   visit(document, {
     Pair: (_, pair, path) => {
+      debugger
       const { key, value } = pair
+      // e.g. react: ^18.2.0
       if (
         isScalar(value)
         && valid(coerce(value.toString()))
         && isScalar(key)
+        && !value.anchor
       ) {
         const packageName = key.toString()
         const packageVersion = value.toString()
         const metaName = convertVisitorPathToPackageMetaName(path)
-        const dep = parseDependency(
-          packageName,
-          packageVersion,
-          'pnpm:catalog',
-          shouldUpdate,
-        )
+        loadPackage(packageName, packageVersion, metaName)
+      }
+      // e.g. react: *react
+      else if (
+        isAlias(value)
+        && isScalar(key)
+      ) {
+        const anchor = findAnchor(document, value)
+        if (!anchor) {
+          debug(`can't find anchor for alias: ${value} in pnpm-workspace.yaml`)
+          return
+        }
 
-        if (!metaNameDepsMap.has(metaName)) {
-          metaNameDepsMap.set(metaName, [dep])
-        }
-        else {
-          metaNameDepsMap.get(metaName)!.push(dep)
-        }
+        const packageName = key.toString()
+        const packageVersion = anchor.value.toString()
+        const metaName = convertVisitorPathToPackageMetaName(path)
+        loadPackage(packageName, packageVersion, metaName)
       }
     },
+    Seq: (_, seq, path) => {
+      // e.g.
+      // defines:  <- pair
+      //   - &react ^18.2.0   <- seq
+      debugger
+    }
   })
 
   const workspaceMetadata = metaNameDepsMap.entries()
@@ -66,6 +79,27 @@ export async function loadPnpmWorkspace(
     .toArray()
 
   return workspaceMetadata
+
+  function loadPackage(
+    name: string,
+    version: string,
+    metaName: string,
+  ) {
+    const dep = parseDependency(
+      name,
+      version,
+      'pnpm:catalog',
+      shouldUpdate,
+    )
+
+    debug(`Found dependency: ${name} in ${metaName}, currentVersion: ${version}`)
+    if (!metaNameDepsMap.has(metaName)) {
+      metaNameDepsMap.set(metaName, [dep])
+    }
+    else {
+      metaNameDepsMap.get(metaName)!.push(dep)
+    }
+  }
 }
 
 export async function writePnpmWorkspace(

@@ -13,6 +13,7 @@ import { DiffColorMap } from '../../utils/diff'
 import { sortDepChanges } from '../../utils/sort'
 
 import { timeDifference } from '../../utils/time'
+import { isPnpmWorkspaceMeta } from '../../utils/assets'
 
 export function renderChange(
   change: ResolvedDepChange,
@@ -23,9 +24,9 @@ export function renderChange(
   const update = change.update && (!interactive || interactive.isChecked(change))
   const pre = interactive
     ? [
-        interactive.isSelected(change) ? FIG_POINTER : FIG_NO_POINTER,
-        interactive.isChecked(change) ? FIG_CHECK : FIG_UNCHECK,
-      ].join('')
+      interactive.isSelected(change) ? FIG_POINTER : FIG_NO_POINTER,
+      interactive.isChecked(change) ? FIG_CHECK : FIG_UNCHECK,
+    ].join('')
     : ' '
 
   let name = change.name
@@ -84,15 +85,11 @@ export function renderChanges(
 
     const diffEntries = Object.keys(diffCounts).length
       ? Object.entries(diffCounts)
-          .map(([key, value]) => `${c[DiffColorMap[key as DiffType || 'patch']](value)} ${key}`)
-          .join(', ')
+        .map(([key, value]) => `${c[DiffColorMap[key as DiffType || 'patch']](value)} ${key}`)
+        .join(', ')
       : c.dim('no change')
 
-    const displayName = pkg.name?.startsWith('catalog:')
-      ? c.dim('catalog:') + c.yellow(pkg.name.slice('catalog:'.length))
-      : pkg.name
-        ? c.cyan(pkg.name)
-        : c.red('›') + c.dim(` ${filepath || ''}`.trimEnd())
+    const displayName = getDisplayName(pkg, filepath)
 
     lines.push(
       `${displayName} ${c.dim('-')} ${diffEntries}`,
@@ -189,4 +186,21 @@ export function renderPackages(resolvePkgs: PackageMeta[], options: CheckOptions
   })
 
   return { lines, errLines }
+}
+
+function getDisplayName(pkg: PackageMeta, filepath: string) {
+  const isWorkspace = isPnpmWorkspaceMeta(pkg)
+
+  if (isWorkspace && pkg.name.startsWith('catalog:')) {
+    return c.dim('catalog:') + c.yellow(pkg.name.slice('catalog:'.length))
+  }
+
+  let displayName = pkg.name
+    ? c.cyan(pkg.name)
+    : c.red('›') + c.dim(` ${filepath || ''}`.trimEnd())
+
+  if (isWorkspace) {
+    displayName += c.italic(c.gray(' (from pnpm-workspace.yaml)'))
+  }
+  return displayName
 }
