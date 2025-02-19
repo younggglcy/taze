@@ -3,8 +3,9 @@ import type { CommonOptions, PnpmWorkspaceMeta, RawDep } from '../types'
 import fs from 'node:fs/promises'
 import _debug from 'debug'
 import { resolve } from 'pathe'
-import { isAlias, parse, parseDocument, YAMLMap } from 'yaml'
-import { findAnchor, writeYaml } from '../utils/yaml'
+import { coerce, valid } from 'semver'
+import { isAlias, isScalar, parseDocument, visit, YAMLMap } from 'yaml'
+import { convertVisitorPathToPackageMetaName, findAnchor, writeYaml } from '../utils/yaml'
 import { dumpDependencies, parseDependency } from './dependencies'
 
 const debug = _debug('taze:io:pnpmWorkspace')
@@ -16,44 +17,55 @@ export async function loadPnpmWorkspace(
 ): Promise<PnpmWorkspaceMeta[]> {
   const filepath = resolve(options.cwd ?? '', relative)
   const rawText = await fs.readFile(filepath, 'utf-8')
-  const raw = parse(rawText)
   const document = parseDocument(rawText)
+  const metaNameDepsMap = new Map<string, RawDep[]>()
 
-  const catalogs: PnpmWorkspaceMeta[] = []
+  visit(document, {
+    Pair: (_, pair, path) => {
+      const { key, value } = pair
+      if (
+        isScalar(value)
+        && valid(coerce(value.toString()))
+        && isScalar(key)
+      ) {
+        const packageName = key.toString()
+        const packageVersion = value.toString()
+        const metaName = convertVisitorPathToPackageMetaName(path)
+        const dep = parseDependency(
+          packageName,
+          packageVersion,
+          'pnpm:catalog',
+          shouldUpdate,
+        )
 
-  function createCatalogFromKeyValue(catalogName: string, map: Record<string, string>): PnpmWorkspaceMeta {
-    const deps: RawDep[] = Object.entries(map)
-      .map(([name, version]) => parseDependency(name, version, 'pnpm:catalog', shouldUpdate))
+        if (!metaNameDepsMap.has(metaName)) {
+          metaNameDepsMap.set(metaName, [dep])
+        }
+        else {
+          metaNameDepsMap.get(metaName)!.push(dep)
+        }
+      }
+    },
+  })
 
-    return {
-      name: `catalog:${catalogName}`,
-      private: true,
-      version: '',
-      type: 'pnpm-workspace.yaml',
-      relative,
-      filepath,
-      raw,
-      deps,
-      resolved: [],
-      document,
-    } satisfies PnpmWorkspaceMeta
-  }
+  const workspaceMetadata = metaNameDepsMap.entries()
+    .map(([name, deps]) => {
+      return {
+        name,
+        deps,
+        document,
+        filepath,
+        private: true,
+        relative,
+        resolved: [],
+        type: 'pnpm-workspace.yaml',
+        version: '',
+        raw: null,
+      } as PnpmWorkspaceMeta
+    })
+    .toArray()
 
-  if (raw.catalog) {
-    catalogs.push(
-      createCatalogFromKeyValue('default', raw.catalog),
-    )
-  }
-
-  if (raw.catalogs) {
-    for (const key of Object.keys(raw.catalogs)) {
-      catalogs.push(
-        createCatalogFromKeyValue(key, raw.catalogs[key]),
-      )
-    }
-  }
-
-  return catalogs
+  return workspaceMetadata
 }
 
 export async function writePnpmWorkspace(

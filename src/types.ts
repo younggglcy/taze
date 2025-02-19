@@ -5,16 +5,7 @@ import type { SortOption } from './utils/sort'
 
 export type RangeMode = typeof MODE_CHOICES[number]
 export type PackageMode = Exclude<RangeMode, 'default'> | 'ignore'
-export type DepType =
-  | 'dependencies'
-  | 'devDependencies'
-  | 'peerDependencies'
-  | 'optionalDependencies'
-  | 'packageManager'
-  | 'pnpm.overrides'
-  | 'resolutions'
-  | 'overrides'
-  | 'pnpm:catalog'
+export type DepType = keyof typeof DependenciesTypeShortMap
 
 export const DependenciesTypeShortMap = {
   'packageManager': 'package-manager',
@@ -183,8 +174,8 @@ export interface GlobalPackageMeta extends BasePackageMeta {
 
 export interface PnpmWorkspaceMeta extends BasePackageMeta {
   type: 'pnpm-workspace.yaml'
-  raw: any
   document: Document
+  raw: null
 }
 
 export type PackageMeta =
