@@ -9,3 +9,9 @@ export * from './types'
 export function defineConfig(config: Partial<CheckOptions>) {
   return config
 }
+
+export {
+  isGlobalPackageMeta,
+  isPackageJsonMeta,
+  isPnpmWorkspaceMeta,
+} from './utils/assets'
